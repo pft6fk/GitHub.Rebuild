@@ -1,0 +1,50 @@
+﻿@model IEnumerable<RepositoryModel>
+
+
+<div class="pb-3">
+    @foreach(var obj in Model)
+    {
+        <div class="col-md-6" style="width:100%">
+            <div class="p-2">
+                <div class="col-12 p-1" style="border:1px solid #008cba; border-radius: 5px;">
+                    <div class="card">
+                        
+                        <div class="card-body">
+                        <div class="pl-1">
+                            <p class="card-title h5 text-primary"><a href="@obj.HtmlUrl">@obj.FullName</a></p>
+                            <p class="card-title text-info">by <a asp-action="UserDetails" asp-route-login="@obj.GitHubOwnerLogin"><b>@obj.GitHubOwnerLogin</b></a> </p>
+                        </div>
+                        <div class="pl-1">
+
+                        </div>
+                        <div class="pl-1 text-secondary">
+                            <p>Used Language: <b>@obj.Language</b></p>
+                        </div>
+                        <div class="pl-1">
+                            <p>Last updated: <b>@obj.UpdatedAt.Date</b></p>
+                            
+                        </div>
+                        <div class="pl-1">
+                            <p>Stars: <b>@obj.StargazersCount</b></p>
+                            
+                        </div>
+                        <div class="pl-1">        
+                            @if (obj.License == null) 
+                            {
+                                <div>License: <b>No license</b></div>   
+                            }
+                            else
+                            {
+                                <div>License: <b >@obj.License </b></div>
+                            }
+                        </div>
+                        </div>
+                    </div>
+                    <div>
+                        <a asp-action="Details" class="btn btn-primary form-control" asp-route-id="@obj.GitHubId">Details</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

@@ -1,0 +1,57 @@
+﻿@model DetailsModel;
+
+<div style="width:100%">
+    <div class="table table-bordered">
+        <div class="text-primary">
+            Contributors of Repo: @Model.Repository.FullName
+        </div>
+        <div>Number of contributors: <b>@Model.Contributors.Count</b></div>
+        @if(Model.Repository.License == null) 
+        {
+            <div>License: <b>No license</b></div>   
+        }
+        else
+        {
+            <div>License: <b >@Model.Repository.License</b></div>
+        }
+        <div> Owner of a Repo:<b> @Model.Repository.GitHubOwnerLogin</b></div>
+        <div> Stars:<b> @Model.Repository.StargazersCount</b>
+        </div>
+
+        <div> List of contributors: 
+            @for (int i = 0; i < @Model.Contributors.Count; i++)
+            {
+                <div class="pb-3">
+                    <div class="col-md-6" style="width:100%">
+                        <div class="p-2">
+                            <div class="col-12 p-1" style="border:1px solid #008cba; border-radius: 5px;">
+                                <div class="card">
+                        
+                                    <div class="card-body">
+                                    <div class="pl-1">
+                                        <p class="card-title h5 text-primary text-center"><a asp-action="UserDetails" asp-route-login="@Model.Contributors[i].Login"><b>@Model.Contributors[i].Login</b></a></p>
+                                    </div>
+                                    <div class="pl-1">
+
+                                    </div>
+                                    <div class="pl-1 text-secondary"> 
+                                        <p>Contributions: <b>@Model.Contributors[i].Contributions</b></p>
+                                    </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                
+            </div>
+                <div>
+                    
+                </div>
+            }
+        </div>
+        <div>
+        </div>
+
+
+    </div>
+</div>
