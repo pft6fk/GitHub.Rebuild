@@ -10,5 +10,16 @@ namespace GitHub.Rebuild.Repository
         {
 
         }
+        public void AddToDb(ContributorsModel contributors, long repoId, int numberOfContributors)
+        {
+            var obj = new ContributorsModel();
+
+            obj.Contributions = contributors.Contributions;
+            obj.RepoId = repoId;
+            obj.Login = contributors.Login;
+            obj.NumberOfContributors = numberOfContributors;
+
+            Add(obj);
+        }
     }
 }

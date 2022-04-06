@@ -27,31 +27,125 @@ namespace GitHub.Rebuild.Controllers
             return View();
         }
 
-
         public async Task<IActionResult> GetRepo(string search)
         {
             var repoRequest = new RepositoryRequest();
-            if()
+            IList<RepositoryModel> obj = new List<RepositoryModel>();
 
-            using (var client = new HttpClient())
+            if (IfRepoExists(search))
             {
-                client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                client.DefaultRequestHeaders.UserAgent.TryParseAdd("request");
-
-                repoRequest = await client.GetFromJsonAsync<RepositoryRequest>(SearchRepoRequest + search);
+                obj = TakeRepoFromDb(search);
             }
+            else
+            {
+                using (var client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                    client.DefaultRequestHeaders.UserAgent.TryParseAdd("request");
 
-            var obj = GitHubToDbParserList(repoRequest.items);
+                    repoRequest = await client.GetFromJsonAsync<RepositoryRequest>(SearchRepoRequest + search);
+                }
+
+                obj = GitHubToDbParserList(repoRequest.items);
+                
+                foreach (var item in obj)
+                {
+                    _unitOfWork.ReposRepository.Add(item);
+                }
+                _unitOfWork.Save();
+            }
 
             return View(obj);
         }
+        public async Task<IActionResult> UserDetails(string login)
+        {
+            var obj = new UserDetailsModel();
+
+            if (IfUserExists(login))
+            {
+                obj.User = TakeUserFromDb(login);
+                obj.Repo = TakeUserRepos(login);
+            }
+            else
+            {
+                using (var client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                    client.DefaultRequestHeaders.UserAgent.TryParseAdd("request");
+
+                    var tempRepo = JsonConvert.DeserializeObject<List<GitHubRepositoryModel>>(await client.GetStringAsync(UserRequest + login + "/repos"));
+                    obj.Repo = GitHubToDbParserList(tempRepo);
+
+                    var tempUser = await client.GetFromJsonAsync<GithubUserModel>(UserRequest + login);
+                    obj.User = GithubUserParser(tempUser);
+                }
+
+                _unitOfWork.UserRepository.Add(obj.User);
+                foreach (var item in obj.Repo)
+                {
+                    _unitOfWork.ReposRepository.Add(item);
+                }
+                _unitOfWork.Save();
+
+            }
+
+
+            return View(obj);
+
+        }
+        public async Task<IActionResult> Details(int id)
+        {
+            var obj = new DetailsModel();
+
+            var repos = _unitOfWork.ReposRepository.GetAll();
+            obj.Repository = repos.Where(n => n.GitHubId == id).FirstOrDefault();
+
+            if (IfContributorsExists(id))
+            {
+                obj.Contributors = TakeContributorsFromDb(id);
+            }
+            else
+            {
+                using (var client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                    client.DefaultRequestHeaders.UserAgent.TryParseAdd("request");
+
+                    obj.Contributors = JsonConvert.DeserializeObject<List<ContributorsModel>>(await client.GetStringAsync(BaseAddress + "repositories/" + id + "/contributors"));
+
+                    //var response = await client.GetAsync(BaseAddress + "repositories/" + id + "/contributors");
+                    //var result = await response.Content.ReadAsStringAsync();
+                    //obj.Contributors = JsonConvert.DeserializeObject<List<ContributorsModel>>(result);
+
+                    //obj.Contributors = await client.GetFromJsonAsync<ContributorsModel>(BaseAddress + "repositories/" + id + "/contributors"); //did not work
+
+                }
+
+                foreach (var item in obj.Contributors)
+                {
+                    _unitOfWork.ContributorsRepository.AddToDb(item, id, obj.Contributors.Count);
+                }
+
+                _unitOfWork.Save();
+
+            }
+
+            return View(obj);
+        }
+        public IActionResult Privacy()
+        {
+            return View();
+        }
+
+
+        /// <summary>
+        /// Searches from db for repositories
+        /// </summary>
+        /// <param name="search">repository name</param>
+        /// <returns>True if any repo contains any repo, otherwise false</returns>
         public bool IfRepoExists(string search)
         {
             IEnumerable<RepositoryModel> RepoDb = _unitOfWork.ReposRepository.GetAll();
-            //IEnumerable<ReposModel> FoundRepos = 
-            //    from repo in RepoDb
-            //    where repo.Name.Contains(search)
-            //    select repo;
 
             foreach (var item in RepoDb)
             {
@@ -60,9 +154,30 @@ namespace GitHub.Rebuild.Controllers
                     return true;
                 }
             }
-            return false;
 
+            return false;
         }
+        
+        /// <summary>
+        /// Takes from db repositories which name is similar to search
+        /// </summary>
+        /// <param name="search"></param>
+        /// <returns>List of repositories</returns>
+        public IList<RepositoryModel> TakeRepoFromDb(string search)
+        {
+            IEnumerable<RepositoryModel> RepoDb = _unitOfWork.ReposRepository.GetAll();
+
+            List<RepositoryModel> reposModels = new List<RepositoryModel>();
+            foreach (var item in RepoDb)
+            {
+                if (item.Name.Contains(search))
+                {
+                    reposModels.Add(item);
+                }
+            }
+            return reposModels;
+        }
+        
         /// <summary>
         /// Parses the Input which comes in GithubRepositoryModel to RepositoryModel 
         /// </summary>
@@ -88,6 +203,7 @@ namespace GitHub.Rebuild.Controllers
 
             return obj;
         }
+        
         /// <summary>
         /// Parses the Input which comes in List from GithubRepositoryModel to RepositoryModel 
         /// </summary>
@@ -107,49 +223,113 @@ namespace GitHub.Rebuild.Controllers
             return repo;
         }
 
-        public async Task<IActionResult> Details(int id)
+        /// <summary>
+        /// Searches from db for contributors who has been contributed in repository which id is equal to repoId
+        /// </summary>
+        /// <param name="repoId"></param>
+        /// <returns>True if contributors exists in particular repository, otherwise false</returns>
+        public bool IfContributorsExists(long repoId)
         {
-            var obj = new DetailsModel();
+            var contributorsDb = _unitOfWork.ContributorsRepository.GetAll();
 
-            using (var client = new HttpClient())
+            foreach (var item in contributorsDb)
             {
-                client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                client.DefaultRequestHeaders.UserAgent.TryParseAdd("request");
-
-                obj.Repository = GitHubToDbParser(await client.GetFromJsonAsync<GitHubRepositoryModel> (BaseAddress + "repositories/" + id));
-                obj.Contributors = JsonConvert.DeserializeObject<List<ContributorsModel>>(await client.GetStringAsync(BaseAddress + "repositories/" + id + "/contributors"));
-
-                //var response = await client.GetAsync(BaseAddress + "repositories/" + id + "/contributors");
-                //var result = await response.Content.ReadAsStringAsync();
-                //obj.Contributors = JsonConvert.DeserializeObject<List<ContributorsModel>>(result);
-
-                //obj.Contributors = await client.GetFromJsonAsync<ContributorsModel>(BaseAddress + "repositories/" + id + "/contributors"); //did not work
-
+                if (item.RepoId == repoId)
+                    return true;
             }
 
-            return View(obj);
+            return false;
         }
 
-        public async Task<IActionResult> UserDetails(string login)
+        /// <summary>
+        /// Takes from db Contributors who has contributed in repository with id equal to repoId
+        /// </summary>
+        /// <param name="repoId"></param>
+        /// <returns>List of Contributors</returns>
+        public List<ContributorsModel> TakeContributorsFromDb (long repoId)
         {
-            var obj = new UserDetailsModel();
+            var contributorsDb = _unitOfWork.ContributorsRepository.GetAll();
 
-            using (var client = new HttpClient())
+            List<ContributorsModel> Contributors = new List<ContributorsModel>();
+
+            foreach (var item in contributorsDb)
             {
-                client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                client.DefaultRequestHeaders.UserAgent.TryParseAdd("request");
-
-                var tempRepo = JsonConvert.DeserializeObject<List<GitHubRepositoryModel>>(await client.GetStringAsync(UserRequest + login + "/repos"));
-                obj.Repo = GitHubToDbParserList(tempRepo);
-
-                var tempUser = await client.GetFromJsonAsync<GithubUserModel>(UserRequest + login);
-                obj.User = GithubUserParser(tempUser);
+                if (item.RepoId == repoId)
+                    Contributors.Add(item);
             }
 
-            return View(obj);
+            return Contributors;
 
         }
 
+        /// <summary>
+        /// Searches for user from db
+        /// </summary>
+        /// <param name="login"></param>
+        /// <returns></returns>
+        public bool IfUserExists(string login)
+        {
+            IEnumerable<UserModel> UserDb = _unitOfWork.UserRepository.GetAll();
+
+            foreach (var item in UserDb)
+            {
+                if (item.Login == login)
+                    return true;
+            }
+            
+            return false;
+        }
+
+        /// <summary>
+        /// Gets user from db 
+        /// </summary>
+        /// <param name="login"></param>
+        /// <returns>User from db</returns>
+        private UserModel TakeUserFromDb(string login)
+        {
+            UserModel user = new UserModel();
+
+            IEnumerable<UserModel> UserDb = _unitOfWork.UserRepository.GetAll();
+
+            foreach (var item in UserDb)
+            {
+                if (item.Login == login)
+                {
+                    user = item;
+                    break;
+                }
+            }
+
+            return user;
+        }
+
+        /// <summary>
+        /// Takes all user repos from db
+        /// </summary>
+        /// <param name="OwnerLogin"></param>
+        /// <returns>Repositories</returns>
+        public IList<RepositoryModel> TakeUserRepos(string OwnerLogin)
+        {
+            IEnumerable<RepositoryModel> RepoDb = _unitOfWork.ReposRepository.GetAll();
+
+            List<RepositoryModel> reposModels = new List<RepositoryModel>();
+            foreach (var item in RepoDb)
+            {
+                if (item.GitHubOwnerLogin.Equals(OwnerLogin))
+                {
+                    reposModels.Add(item);
+                }
+            }
+
+            return reposModels;
+
+        }
+
+        /// <summary>
+        /// Gets as input Github api and parses to local created UserModel
+        /// </summary>
+        /// <param name="githubUserModel"></param>
+        /// <returns>Object of UserModel class</returns>
         private UserModel GithubUserParser(GithubUserModel githubUserModel)
         {
             var user = new UserModel();
@@ -168,10 +348,6 @@ namespace GitHub.Rebuild.Controllers
             return user;
         }
 
-        public IActionResult Privacy()
-        {
-            return View();
-        }
 
     }
 }
